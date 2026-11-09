@@ -21,4 +21,9 @@ module.exports = {
   ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov"],
+  // Rapport d'exécution des tests au format Generic Test Data de SonarQube
+  reporters: [
+    "default",
+    ["jest-sonar", { outputDirectory: "coverage", outputName: "test-report.xml" }],
+  ],
 };
