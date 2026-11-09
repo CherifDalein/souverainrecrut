@@ -49,15 +49,50 @@ Jenkins et SonarQube partagent le réseau Docker `ci` ; Jenkins utilise le moteu
 - Création du Quality Gate **SouverainRecrut**, défini par défaut, avec des conditions sur le *New Code* **et** l'*Overall Code* : le gate par défaut ne contrôlait que le nouveau code et passait même avec une couverture globale faible.
 - Traitement du Security Hotspot **S5689** (`X-Powered-By`) : correction dans `app.ts` et test de non-régression.
 
+La couverture est passée de **52,5 %** à **94,4 %**. Le nombre de lignes à couvrir reste stable (504 → 503) : la hausse vient uniquement des tests ajoutés, sans modification du code applicatif.
+
+![Couverture avant les tests](../integration-continue/captures/01-sonar-activity-couverture-avant-52.5.png)
+*Figure 1 – SonarQube, onglet Activity : couverture avant l'écriture des tests (289 lignes couvertes sur 504, soit 52,5 %).*
+
+![Couverture après les tests](../integration-continue/captures/03-sonar-activity-couverture-apres-94.4.png)
+*Figure 2 – SonarQube, onglet Activity : couverture après l'écriture des tests (493 lignes couvertes sur 503, soit 94,4 %).*
+
+![Vue d'ensemble après les tests](../integration-continue/captures/04-sonar-overview-apres-tests.png)
+*Figure 3 – Vue Overall Code après les tests : Quality Gate Passed, 0 bug, 0 vulnérabilité, 0 % de duplication.*
+
+![Rapport d'exécution des tests](../integration-continue/captures/05-sonar-overview-69-tests-version-1.0.0.png)
+*Figure 4 – Rapport d'exécution des tests importé dans SonarQube (69 tests à ce stade) et version 1.0.0 de l'analyse.*
+
+![Quality Gate SouverainRecrut](../integration-continue/captures/06-sonar-quality-gate-souverainrecrut.png)
+*Figure 5 – Quality Gate SouverainRecrut : couverture ≥ 80 %, duplications ≤ 3 %, notes A, 100 % des Security Hotspots revus.*
+
 ### 3.4 Mise en place de Jenkins
 - Image Jenkins personnalisée ([`integration-continue/jenkins/Dockerfile`](../integration-continue/jenkins/Dockerfile)) : Node 22, client Docker + buildx, Trivy, plugins préinstallés (Git, Pipeline, SonarQube, Credentials Binding).
 - `docker-compose.yml` : volume persistant `jenkins_home`, socket Docker de l'hôte, réseau `ci`.
 - Credentials `dockerhub` et `sonar-token` ; serveur SonarQube et outil `sonar-scanner` déclarés ; webhook SonarQube → Jenkins.
 
+![Installation des plugins Jenkins](../integration-continue/captures/08-jenkins-installation-plugins.png)
+*Figure 6 – Installation des plugins Jenkins (Pipeline, Git, Credentials Binding, Timestamper…).*
+
+![Credentials Jenkins](../integration-continue/captures/09-jenkins-credentials.png)
+*Figure 7 – Credentials Jenkins : `dockerhub` et `sonar-token`, secrets masqués. Aucun secret n'est présent dans le dépôt.*
+
+![Serveur SonarQube dans Jenkins](../integration-continue/captures/10-jenkins-config-serveur-sonarqube.png)
+*Figure 8 – Déclaration du serveur SonarQube dans Jenkins (`http://sonarqube:9000`, authentification par `sonar-token`).*
+
+![Outil sonar-scanner](../integration-continue/captures/11-jenkins-outil-sonar-scanner.png)
+*Figure 9 – Outil `sonar-scanner` installé automatiquement par Jenkins (SonarQube Scanner 8.4.0.16527).*
+
+![Webhook SonarQube vers Jenkins](../integration-continue/captures/12-sonar-webhook-jenkins.png)
+*Figure 10 – Webhook SonarQube → Jenkins : transmet le verdict du Quality Gate au stage `waitForQualityGate`.*
+
 ### 3.5 Automatisation de la chaîne CI
 [`integration-continue/Jenkinsfile`](../integration-continue/Jenkinsfile) : checkout `Dev` → `npm ci` → `prisma generate` → tests + couverture → analyse SonarQube → Quality Gate → build Docker → scan Trivy → publication Docker Hub.
 - Déclenchement automatique par `pollSCM` (toutes les 2 min) : un webhook GitHub ne peut pas atteindre un Jenkins local.
 - La publication n'a lieu que si **tous** les contrôles réussissent.
+
+![Pipeline Jenkins build #3](../integration-continue/captures/13-jenkins-pipeline-build-3-succes.png)
+*Figure 11 – Build #3 : tous les stages au vert, Quality Gate SonarQube Passed reçu par webhook, puis publication sur Docker Hub.*
 
 ### 3.6 Image Docker et publication
 
@@ -74,6 +109,9 @@ Jenkins et SonarQube partagent le réseau Docker `ci` ; Jenkins utilise le moteu
 **Seuils Trivy** : HIGH et CRITICAL bloquants (`--exit-code 1`). Une exception justifiée et datée (`deepmerge-ts`, CLI Prisma, correctif réservé à Prisma 7) est documentée dans `backend/.trivyignore`. Les autres failles ont été corrigées par la mise à jour de l'image de base, `npm audit fix` et un `override` de `effect`.
 
 **Tags** : `<version>-<n° build>` (ex. `1.0.0-3`) et `sha-<commit>` (ex. `sha-8d97f20`), uniques à chaque build ; labels OCI `revision` et `version` dans l'image. `latest` n'est pas utilisé.
+
+![Tags Docker Hub](../integration-continue/captures/07-dockerhub-push-manuel-1.0.0-sha-ef9f10e.png)
+*Figure 12 – Docker Hub : les tags `1.0.0` et `sha-ef9f10e` pointent vers le même digest (`f6682ad13f0d`), donc vers la même image, identifiée à la fois par sa version et par son commit.*
 
 ## 4. Résultats
 
