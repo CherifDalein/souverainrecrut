@@ -3,6 +3,13 @@ module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
   roots: ["<rootDir>/tests"],
+  setupFiles: ["<rootDir>/tests/setup.ts"],
+  testPathIgnorePatterns: ["/node_modules/", "/tests/helpers/", "/tests/setup.ts"],
+  // Prisma est remplacé par un mock : aucun PostgreSQL requis dans la CI
+  moduleNameMapper: {
+    "^(\\.{1,2}/)+config/prisma$": "<rootDir>/tests/helpers/prisma-mock.ts",
+  },
+  clearMocks: true,
   transform: {
     "^.+\\.ts$": ["ts-jest", { tsconfig: "tsconfig.test.json" }],
   },
