@@ -48,6 +48,12 @@ describe("Endpoints publics", () => {
     expect(res.body.data.database).toBe("DISCONNECTED");
   });
 
+  it("ne divulgue pas le framework via l'en-tête X-Powered-By", async () => {
+    const res = await request(app).get("/v1/health");
+
+    expect(res.headers["x-powered-by"]).toBeUndefined();
+  });
+
   it("retourne 404 pour une route inconnue", async () => {
     const res = await request(app).get("/v1/route-inexistante");
 

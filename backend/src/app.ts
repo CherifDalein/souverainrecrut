@@ -14,6 +14,9 @@ import { errorMiddleware } from "./middlewares/error.middleware";
 
 const app = express();
 
+// Ne pas divulguer le framework utilisé (en-tête X-Powered-By) – règle Sonar S5689
+app.disable("x-powered-by");
+
 /**
  * ==========================================
  * Global Middlewares
