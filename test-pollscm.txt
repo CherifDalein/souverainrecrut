@@ -1,0 +1,1 @@
+Test du déclenchement automatique Jenkins (pollSCM) – 09/11/2026 15:01
