@@ -1,0 +1,5 @@
+
+souverainrecrut-backend:1.0.0 (alpine 3.24.4)
+=============================================
+Total: 0 (HIGH: 0, CRITICAL: 0)
+

@@ -1,0 +1,12 @@
+# ==========================================================
+# Exceptions Trivy acceptées – à réévaluer à chaque version
+# ==========================================================
+#
+# CVE-2026-40345 – deepmerge-ts < 8.0.0 (HIGH, stack exhaustion)
+# - Dépendance transitive de prisma -> @prisma/config (CLI Prisma).
+# - Utilisée uniquement pour lire la configuration Prisma au lancement
+#   des migrations ; jamais exposée aux requêtes HTTP de l'API.
+# - Correctif uniquement disponible avec Prisma 7 (version majeure,
+#   changements cassants) : migration planifiée hors de ce sprint.
+# - Revue : 09/11/2026 – à supprimer lors du passage à Prisma 7.
+CVE-2026-40345
