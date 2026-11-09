@@ -1,0 +1,90 @@
+<testExecutions version="1">
+<file path="tests/applications.test.ts">
+<testCase name="Candidatures GET /v1/applications liste les candidatures avec candidat et offre" duration="67" />
+<testCase name="Candidatures GET /v1/applications/:id retourne une candidature" duration="19" />
+<testCase name="Candidatures GET /v1/applications/:id retourne 404 si introuvable" duration="5" />
+<testCase name="Candidatures POST /v1/applications cr&#xe9;e une candidature" duration="35" />
+<testCase name="Candidatures POST /v1/applications refuse un statut inconnu (400)" duration="6" />
+<testCase name="Candidatures PUT /v1/applications/:id change le statut" duration="4" />
+<testCase name="Candidatures PUT /v1/applications/:id exige un statut (400)" duration="5" />
+<testCase name="Candidatures DELETE /v1/applications/:id supprime une candidature (ADMIN)" duration="6" />
+<testCase name="ApplicationService.updateStatus met &#xe0; jour le statut d&apos;une candidature existante" duration="1" />
+<testCase name="ApplicationService.updateStatus l&#xe8;ve une erreur 404 si la candidature n&apos;existe pas" duration="1" />
+</file>
+<file path="tests/access-control.test.ts">
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : routes prot&#xe9;g&#xe9;es sans token (401) get /v1/users" duration="63" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : routes prot&#xe9;g&#xe9;es sans token (401) get /v1/candidates" duration="10" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : routes prot&#xe9;g&#xe9;es sans token (401) get /v1/jobs" duration="11" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : routes prot&#xe9;g&#xe9;es sans token (401) get /v1/applications" duration="1" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : routes prot&#xe9;g&#xe9;es sans token (401) get /v1/dashboard/stats" duration="2" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : routes prot&#xe9;g&#xe9;es sans token (401) post /v1/candidates" duration="2" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : RECRUITER (403 sur les actions ADMIN) get /v1/users est interdit" duration="7" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : RECRUITER (403 sur les actions ADMIN) delete /v1/candidates/cand-1 est interdit" duration="4" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : RECRUITER (403 sur les actions ADMIN) delete /v1/jobs/job-1 est interdit" duration="17" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : RECRUITER (403 sur les actions ADMIN) delete /v1/applications/app-1 est interdit" duration="15" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : RECRUITER (403 sur les actions ADMIN) aucune requ&#xea;te en base n&apos;est faite quand l&apos;acc&#xe8;s est refus&#xe9;" duration="8" />
+<testCase name="Contr&#xf4;le d&apos;acc&#xe8;s : ADMIN peut lister les utilisateurs" duration="6" />
+<testCase name="Middleware authorize renvoie 401 si aucun utilisateur n&apos;est attach&#xe9; &#xe0; la requ&#xea;te" duration="0" />
+</file>
+<file path="tests/health.test.ts">
+<testCase name="Endpoints publics GET / retourne le message de bienvenue" duration="58" />
+<testCase name="Endpoints publics GET /v1/health retourne 200 et le statut UP" duration="12" />
+<testCase name="Endpoints publics GET /v1/info retourne les informations de l&apos;API" duration="20" />
+<testCase name="Endpoints publics GET /v1/ready retourne 200 quand la base r&#xe9;pond" duration="2" />
+<testCase name="Endpoints publics GET /v1/ready retourne 503 quand la base est indisponible" duration="4" />
+<testCase name="Endpoints publics ne divulgue pas le framework via l&apos;en-t&#xea;te X-Powered-By" duration="1" />
+<testCase name="Endpoints publics retourne 404 pour une route inconnue" duration="4" />
+</file>
+<file path="tests/errors.test.ts">
+<testCase name="errorMiddleware renvoie le code et le message d&apos;une AppError" duration="2" />
+<testCase name="errorMiddleware masque les erreurs inattendues derri&#xe8;re une erreur 500" duration="1" />
+<testCase name="Pagination applique les valeurs par d&#xe9;faut" duration="0" />
+<testCase name="Pagination borne la page &#xe0; 1 et la limite entre 1 et 100" duration="0" />
+<testCase name="Pagination calcule le nombre total de pages" duration="0" />
+</file>
+<file path="tests/auth.test.ts">
+<testCase name="POST /v1/auth/login retourne un token JWT et l&apos;utilisateur sans mot de passe" duration="75" />
+<testCase name="POST /v1/auth/login refuse un email inconnu (401)" duration="18" />
+<testCase name="POST /v1/auth/login refuse un mauvais mot de passe (401)" duration="15" />
+<testCase name="GET /v1/auth/me retourne le profil de l&apos;utilisateur connect&#xe9;" duration="10" />
+<testCase name="GET /v1/auth/me retourne 404 si l&apos;utilisateur n&apos;existe plus" duration="15" />
+<testCase name="GET /v1/auth/me refuse une requ&#xea;te sans token (401)" duration="10" />
+<testCase name="GET /v1/auth/me refuse un header qui n&apos;est pas de type Bearer (401)" duration="20" />
+<testCase name="GET /v1/auth/me refuse un token sign&#xe9; avec une autre cl&#xe9; (401)" duration="8" />
+<testCase name="GET /v1/auth/me refuse un token expir&#xe9; (401)" duration="24" />
+</file>
+<file path="tests/candidates.test.ts">
+<testCase name="Candidats GET /v1/candidates liste les candidats avec pagination" duration="98" />
+<testCase name="Candidats GET /v1/candidates/:id retourne un candidat" duration="9" />
+<testCase name="Candidats GET /v1/candidates/:id retourne 404 si introuvable" duration="3" />
+<testCase name="Candidats POST /v1/candidates cr&#xe9;e un candidat (email normalis&#xe9;)" duration="10" />
+<testCase name="Candidats POST /v1/candidates refuse un email d&#xe9;j&#xe0; utilis&#xe9; (409)" duration="3" />
+<testCase name="Candidats POST /v1/candidates refuse des donn&#xe9;es invalides (400)" duration="3" />
+<testCase name="Candidats PUT /v1/candidates/:id met &#xe0; jour un candidat" duration="2" />
+<testCase name="Candidats PUT /v1/candidates/:id retourne 404 si introuvable" duration="2" />
+<testCase name="Candidats DELETE /v1/candidates/:id supprime un candidat (ADMIN)" duration="3" />
+</file>
+<file path="tests/jobs.test.ts">
+<testCase name="Offres d&apos;emploi GET /v1/jobs liste les offres (pagination par d&#xe9;faut)" duration="36" />
+<testCase name="Offres d&apos;emploi GET /v1/jobs/:id retourne une offre" duration="19" />
+<testCase name="Offres d&apos;emploi GET /v1/jobs/:id retourne 404 si introuvable" duration="2" />
+<testCase name="Offres d&apos;emploi POST /v1/jobs cr&#xe9;e une offre" duration="9" />
+<testCase name="Offres d&apos;emploi POST /v1/jobs refuse une offre incompl&#xe8;te (400)" duration="4" />
+<testCase name="Offres d&apos;emploi PUT /v1/jobs/:id met &#xe0; jour une offre" duration="2" />
+<testCase name="Offres d&apos;emploi DELETE /v1/jobs/:id supprime une offre (ADMIN)" duration="2" />
+<testCase name="Offres d&apos;emploi DELETE /v1/jobs/:id retourne 404 si introuvable" duration="2" />
+</file>
+<file path="tests/dashboard.test.ts">
+<testCase name="GET /v1/dashboard/stats retourne les statistiques globales" duration="7" />
+</file>
+<file path="tests/users.test.ts">
+<testCase name="Utilisateurs (ADMIN) GET /v1/users liste les utilisateurs" duration="65" />
+<testCase name="Utilisateurs (ADMIN) GET /v1/users/:id retourne un utilisateur" duration="18" />
+<testCase name="Utilisateurs (ADMIN) GET /v1/users/:id retourne 404 si introuvable" duration="3" />
+<testCase name="Utilisateurs (ADMIN) POST /v1/users cr&#xe9;e un utilisateur avec un mot de passe hach&#xe9;" duration="214" />
+<testCase name="Utilisateurs (ADMIN) POST /v1/users refuse un email d&#xe9;j&#xe0; utilis&#xe9; (409)" duration="3" />
+<testCase name="Utilisateurs (ADMIN) POST /v1/users refuse un mot de passe trop court (400)" duration="2" />
+<testCase name="Utilisateurs (ADMIN) PUT /v1/users/:id met &#xe0; jour un utilisateur" duration="2" />
+<testCase name="Utilisateurs (ADMIN) DELETE /v1/users/:id supprime un utilisateur" duration="1" />
+</file>
+</testExecutions>

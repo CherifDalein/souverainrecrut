@@ -1,0 +1,67 @@
+----------------------------|---------|----------|---------|---------|-------------------
+File                        | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+----------------------------|---------|----------|---------|---------|-------------------
+All files                   |     100 |    68.11 |     100 |     100 |                   
+ src                        |     100 |      100 |     100 |     100 |                   
+  app.ts                    |     100 |      100 |     100 |     100 |                   
+ src/config                 |     100 |    66.66 |     100 |     100 |                   
+  env.ts                    |     100 |    66.66 |     100 |     100 | 8-14              
+ src/controllers            |     100 |      100 |     100 |     100 |                   
+  application.controller.ts |     100 |      100 |     100 |     100 |                   
+  auth.controller.ts        |     100 |      100 |     100 |     100 |                   
+  candidate.controller.ts   |     100 |      100 |     100 |     100 |                   
+  dashboard.controller.ts   |     100 |      100 |     100 |     100 |                   
+  health.controller.ts      |     100 |      100 |     100 |     100 |                   
+  info.controller.ts        |     100 |      100 |     100 |     100 |                   
+  job.controller.ts         |     100 |      100 |     100 |     100 |                   
+  user.controller.ts        |     100 |      100 |     100 |     100 |                   
+ src/errors                 |     100 |        0 |     100 |     100 |                   
+  app.error.ts              |     100 |        0 |     100 |     100 | 9                 
+ src/middlewares            |     100 |    93.75 |     100 |     100 |                   
+  auth.middleware.ts        |     100 |      100 |     100 |     100 |                   
+  authorize.middleware.ts   |     100 |      100 |     100 |     100 |                   
+  cors.middleware.ts        |     100 |      100 |     100 |     100 |                   
+  error.middleware.ts       |     100 |      100 |     100 |     100 |                   
+  logger.middleware.ts      |     100 |       50 |     100 |     100 | 10                
+  not-found.middleware.ts   |     100 |      100 |     100 |     100 |                   
+  validate.middleware.ts    |     100 |      100 |     100 |     100 |                   
+ src/repositories           |     100 |        0 |     100 |     100 |                   
+  application.repository.ts |     100 |        0 |     100 |     100 | 13                
+  candidate.repository.ts   |     100 |        0 |     100 |     100 | 9                 
+  dashboard.repository.ts   |     100 |      100 |     100 |     100 |                   
+  job.repository.ts         |     100 |        0 |     100 |     100 | 9                 
+  user.repository.ts        |     100 |        0 |     100 |     100 | 9                 
+ src/routes                 |     100 |      100 |     100 |     100 |                   
+  application.routes.ts     |     100 |      100 |     100 |     100 |                   
+  auth.routes.ts            |     100 |      100 |     100 |     100 |                   
+  candidate.routes.ts       |     100 |      100 |     100 |     100 |                   
+  dashboard.routes.ts       |     100 |      100 |     100 |     100 |                   
+  health.routes.ts          |     100 |      100 |     100 |     100 |                   
+  index.ts                  |     100 |      100 |     100 |     100 |                   
+  info.routes.ts            |     100 |      100 |     100 |     100 |                   
+  job.routes.ts             |     100 |      100 |     100 |     100 |                   
+  user.routes.ts            |     100 |      100 |     100 |     100 |                   
+ src/services               |     100 |    69.23 |     100 |     100 |                   
+  application.service.ts    |     100 |       50 |     100 |     100 | 19                
+  auth.service.ts           |     100 |      100 |     100 |     100 |                   
+  candidate.service.ts      |     100 |    66.66 |     100 |     100 | 16                
+  dashboard.service.ts      |     100 |      100 |     100 |     100 |                   
+  health.service.ts         |     100 |      100 |     100 |     100 |                   
+  info.service.ts           |     100 |      100 |     100 |     100 |                   
+  job.service.ts            |     100 |       50 |     100 |     100 | 16                
+  user.service.ts           |     100 |       75 |     100 |     100 | 17                
+ src/utils                  |     100 |      100 |     100 |     100 |                   
+  async-handler.ts          |     100 |      100 |     100 |     100 |                   
+  pagination.ts             |     100 |      100 |     100 |     100 |                   
+ src/validators             |     100 |      100 |     100 |     100 |                   
+  application.schema.ts     |     100 |      100 |     100 |     100 |                   
+  candidate.schema.ts       |     100 |      100 |     100 |     100 |                   
+  job.schema.ts             |     100 |      100 |     100 |     100 |                   
+  user.schema.ts            |     100 |      100 |     100 |     100 |                   
+----------------------------|---------|----------|---------|---------|-------------------
+=============================== Coverage summary ===============================
+Statements   : 100% ( 490/490 )
+Branches     : 68.11% ( 47/69 )
+Functions    : 100% ( 98/98 )
+Lines        : 100% ( 486/486 )
+================================================================================
