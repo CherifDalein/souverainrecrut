@@ -1,0 +1,148 @@
+// ==================================================================
+// Pipeline CI – SouverainRecrut Backend
+// Checkout -> dépendances -> Prisma -> tests -> SonarQube -> Quality Gate
+//          -> build Docker -> scan Trivy -> publication Docker Hub
+// ==================================================================
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+    timeout(time: 30, unit: 'MINUTES')
+  }
+
+  // GitHub ne peut pas joindre localhost : Jenkins vérifie le dépôt toutes les 2 minutes
+  triggers {
+    pollSCM('H/2 * * * *')
+  }
+
+  environment {
+    IMAGE       = 'cherifdiallo725/souverainrecrut-backend'
+    BACKEND_DIR = 'backend'
+  }
+
+  stages {
+
+    stage('Checkout Dev') {
+      steps {
+        checkout scm
+        script {
+          env.SHORT_SHA   = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+          env.APP_VERSION = sh(script: "node -p \"require('./${BACKEND_DIR}/package.json').version\"", returnStdout: true).trim()
+          env.TAG_VERSION = "${env.APP_VERSION}-${env.BUILD_NUMBER}"
+          env.TAG_SHA     = "sha-${env.SHORT_SHA}"
+        }
+        echo "Commit ${env.SHORT_SHA} – tags : ${env.TAG_VERSION}, ${env.TAG_SHA}"
+      }
+    }
+
+    stage('Installation des dépendances') {
+      steps {
+        dir(env.BACKEND_DIR) {
+          sh 'node -v && npm -v'
+          sh 'npm ci'
+        }
+      }
+    }
+
+    stage('Génération Prisma') {
+      steps {
+        dir(env.BACKEND_DIR) {
+          sh 'npx prisma generate'
+        }
+      }
+    }
+
+    stage('Tests + couverture') {
+      steps {
+        dir(env.BACKEND_DIR) {
+          sh 'npm run test:coverage'
+        }
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: "${BACKEND_DIR}/coverage/**", allowEmptyArchive: true
+        }
+      }
+    }
+
+    stage('Analyse SonarQube') {
+      steps {
+        dir(env.BACKEND_DIR) {
+          withSonarQubeEnv('sonarqube') {
+            sh "${tool 'sonar-scanner'}/bin/sonar-scanner -Dsonar.projectVersion=${env.APP_VERSION}"
+          }
+        }
+      }
+    }
+
+    stage('Quality Gate') {
+      steps {
+        // Attend le verdict envoyé par le webhook SonarQube ; échec = pipeline arrêté
+        timeout(time: 5, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+
+    stage('Build image Docker') {
+      steps {
+        sh """
+          docker build \
+            --label org.opencontainers.image.revision=${env.SHORT_SHA} \
+            --label org.opencontainers.image.version=${env.TAG_VERSION} \
+            -t ${IMAGE}:${env.TAG_VERSION} \
+            -t ${IMAGE}:${env.TAG_SHA} \
+            ${BACKEND_DIR}
+        """
+      }
+    }
+
+    stage('Scan Trivy') {
+      steps {
+        // Seuil : HIGH et CRITICAL bloquants ; exceptions justifiées dans .trivyignore
+        sh """
+          trivy image \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --ignorefile ${BACKEND_DIR}/.trivyignore \
+            --exit-code 1 \
+            --format table \
+            --output trivy-report.txt \
+            ${IMAGE}:${env.TAG_SHA}
+        """
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+        }
+      }
+    }
+
+    stage('Publication Docker Hub') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub',
+                                          usernameVariable: 'DH_USER',
+                                          passwordVariable: 'DH_TOKEN')]) {
+          sh 'echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin'
+          sh "docker push ${IMAGE}:${env.TAG_VERSION}"
+          sh "docker push ${IMAGE}:${env.TAG_SHA}"
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'docker logout || true'
+    }
+    success {
+      echo "Image publiée : ${IMAGE}:${env.TAG_VERSION} et ${IMAGE}:${env.TAG_SHA}"
+    }
+    failure {
+      echo 'Pipeline en échec : aucune image publiée.'
+    }
+  }
+}
