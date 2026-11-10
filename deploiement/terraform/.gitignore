@@ -1,0 +1,9 @@
+# État et cache Terraform : contiennent des informations sur l'infrastructure
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Valeurs locales
+terraform.tfvars
+*.auto.tfvars

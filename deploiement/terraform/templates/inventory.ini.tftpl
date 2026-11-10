@@ -1,0 +1,6 @@
+# Fichier généré par Terraform (deploiement/terraform) – ne pas modifier à la main
+[app]
+${server_name} ansible_host=${server_ip} ansible_user=${ssh_user} ansible_ssh_private_key_file=${ssh_key_path}
+
+[app:vars]
+ansible_python_interpreter=/usr/bin/python3

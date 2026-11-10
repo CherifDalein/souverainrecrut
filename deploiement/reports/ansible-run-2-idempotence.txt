@@ -1,0 +1,13 @@
+$ ansible-playbook playbook.yml -K        # 2e exécution : vérification de l'idempotence
+
+Toutes les tâches : ok (aucune modification)
+
+TASK [Résumé]
+    - 'Serveur      : souverainrecrut-srv (Ubuntu 24.04, aarch64)'
+    - 'Docker       : 29.9.3'
+    - 'Compose      : 5.7.0'
+    - 'Conteneur de test : OK'
+    - 'Répertoires  : /opt/souverainrecrut/staging, /opt/souverainrecrut/prod'
+
+PLAY RECAP
+souverainrecrut-srv : ok=13   changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0

@@ -1,0 +1,23 @@
+$ ansible-playbook playbook.yml -K        # 1re exécution : installation
+
+TASK [Mettre à jour le cache APT et les paquets] ........ changed
+TASK [Installer les dépendances nécessaires] ............ changed
+TASK [Ajouter le dépôt APT officiel de Docker] .......... changed
+TASK [Installer Docker Engine et le plugin Docker Compose] changed
+TASK [Activer et démarrer le service Docker] ............ ok
+TASK [Autoriser l'utilisateur de déploiement à utiliser Docker (sans sudo)] changed
+TASK [Créer le répertoire racine de déploiement] ........ changed
+TASK [Créer un répertoire par environnement] ............ changed (staging, prod)
+TASK [Vérifier la version de Docker] .................... ok
+TASK [Vérifier la version de Docker Compose] ............ ok
+TASK [Lancer un conteneur de test] ...................... ok
+
+TASK [Résumé]
+    - 'Serveur      : souverainrecrut-srv (Ubuntu 24.04, aarch64)'
+    - 'Docker       : 29.9.3'
+    - 'Compose      : 5.7.0'
+    - 'Conteneur de test : OK'
+    - 'Répertoires  : /opt/souverainrecrut/staging, /opt/souverainrecrut/prod'
+
+PLAY RECAP
+souverainrecrut-srv : ok=13   changed=7    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0

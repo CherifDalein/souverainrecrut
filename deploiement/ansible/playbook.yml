@@ -1,0 +1,128 @@
+# ==========================================================
+# Préparation du serveur de déploiement SouverainRecrut
+# (cahier des charges, section 4.3)
+#
+#   ansible-playbook playbook.yml -K
+#
+# Idempotent : une deuxième exécution ne modifie rien (changed=0).
+# ==========================================================
+- name: Préparer le serveur Ubuntu pour le déploiement Docker
+  hosts: app
+  become: true
+
+  vars:
+    deploy_user: "{{ ansible_user }}"
+    deploy_root: /opt/souverainrecrut
+    environments: [staging, prod]
+    docker_packages:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    # Architecture Debian (arm64 sur la VM UTM, amd64 sur un serveur x86)
+    docker_arch: "{{ {'aarch64': 'arm64', 'x86_64': 'amd64'}[ansible_facts.architecture] }}"
+
+  tasks:
+    # ------------------------------------------------------
+    # 1. Mise à jour du système et dépendances
+    # ------------------------------------------------------
+    - name: Mettre à jour le cache APT et les paquets
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+        upgrade: safe
+
+    - name: Installer les dépendances nécessaires
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, gnupg, python3-debian]
+        state: present
+
+    # ------------------------------------------------------
+    # 2. Docker Engine et plugin Compose (dépôt officiel Docker)
+    # ------------------------------------------------------
+    - name: Ajouter le dépôt APT officiel de Docker (clé GPG incluse)
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: [deb]
+        uris: https://download.docker.com/linux/ubuntu
+        suites: ["{{ ansible_facts.distribution_release }}"]
+        components: [stable]
+        architectures: ["{{ docker_arch }}"]
+        signed_by: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Installer Docker Engine et le plugin Docker Compose
+      ansible.builtin.apt:
+        name: "{{ docker_packages }}"
+        state: present
+        update_cache: true
+
+    # ------------------------------------------------------
+    # 3. Service Docker
+    # ------------------------------------------------------
+    - name: Activer et démarrer le service Docker
+      ansible.builtin.systemd_service:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Autoriser l'utilisateur de déploiement à utiliser Docker (sans sudo)
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: true
+      register: docker_group
+
+    - name: Rouvrir la connexion SSH pour prendre en compte le groupe docker
+      ansible.builtin.meta: reset_connection
+
+    # ------------------------------------------------------
+    # 4. Répertoires de déploiement (un par environnement)
+    # ------------------------------------------------------
+    - name: Créer le répertoire racine de déploiement
+      ansible.builtin.file:
+        path: "{{ deploy_root }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0750"
+
+    - name: Créer un répertoire par environnement
+      ansible.builtin.file:
+        path: "{{ deploy_root }}/{{ item }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: "0750"
+      loop: "{{ environments }}"
+
+    # ------------------------------------------------------
+    # 5. Vérification du fonctionnement des services
+    # ------------------------------------------------------
+    - name: Vérifier la version de Docker (en tant qu'utilisateur de déploiement)
+      ansible.builtin.command: docker version --format '{{ "{{" }}.Server.Version{{ "}}" }}'
+      become: false
+      register: docker_version
+      changed_when: false
+
+    - name: Vérifier la version de Docker Compose
+      ansible.builtin.command: docker compose version --short
+      become: false
+      register: compose_version
+      changed_when: false
+
+    - name: Lancer un conteneur de test
+      ansible.builtin.command: docker run --rm hello-world
+      become: false
+      register: hello
+      changed_when: false
+
+    - name: Résumé
+      ansible.builtin.debug:
+        msg:
+          - "Serveur      : {{ inventory_hostname }} ({{ ansible_facts.distribution }} {{ ansible_facts.distribution_version }}, {{ ansible_facts.architecture }})"
+          - "Docker       : {{ docker_version.stdout }}"
+          - "Compose      : {{ compose_version.stdout }}"
+          - "Conteneur de test : {{ 'OK' if 'Hello from Docker!' in hello.stdout else 'ÉCHEC' }}"
+          - "Répertoires  : {{ environments | map('regex_replace', '^', deploy_root ~ '/') | join(', ') }}"

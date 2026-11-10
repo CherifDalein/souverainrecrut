@@ -1,0 +1,7 @@
+ansible_inventory = "/Users/Cherif/Documents/Cours 26-27/CI-CD/Projet/souverainrecrut/deploiement/ansible/inventory.ini"
+api_urls = {
+  "prod" = "http://192.168.64.2:4000/v1/health"
+  "staging" = "http://192.168.64.2:4001/v1/health"
+}
+server_ip = "192.168.64.2"
+ssh_command = "ssh -i ~/.ssh/souverainrecrut_deploy usercicd@192.168.64.2"

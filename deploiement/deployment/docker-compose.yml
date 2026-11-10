@@ -1,0 +1,94 @@
+# ==========================================================
+# Déploiement SouverainRecrut : API Backend + PostgreSQL
+# (cahier des charges, section 5.2)
+#
+# Un même fichier sert pour tous les environnements ; seules les
+# valeurs du fichier .env changent (projet, port, secrets, tag).
+#
+#   docker compose pull
+#   docker compose up -d
+#   docker compose ps
+#   docker compose logs -f backend
+# ==========================================================
+name: ${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME manquant dans .env}
+
+x-backend-image: &backend-image
+  # Image publiée par Jenkins sur Docker Hub : jamais reconstruite ici
+  image: ${BACKEND_IMAGE:?BACKEND_IMAGE manquant}:${IMAGE_TAG:?IMAGE_TAG manquant}
+
+x-database-url: &database-url
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+
+services:
+  # --------------------------------------------------------
+  # Base de données PostgreSQL (image officielle)
+  # --------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB manquant}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER manquant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}
+    volumes:
+      - pgdata:/var/lib/postgresql/data      # données persistantes
+    networks:
+      - backend
+    # Aucun port publié : la base n'est accessible que depuis le réseau Docker
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --------------------------------------------------------
+  # Migrations Prisma : conteneur ponctuel exécuté avant l'API
+  # (prisma migrate deploy n'applique que les migrations
+  #  versionnées, jamais de modification destructive implicite)
+  # --------------------------------------------------------
+  migrate:
+    <<: *backend-image
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
+    restart: "no"
+    environment:
+      <<: *database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+
+  # --------------------------------------------------------
+  # API Backend
+  # --------------------------------------------------------
+  backend:
+    <<: *backend-image
+    restart: unless-stopped
+    environment:
+      <<: *database-url
+      NODE_ENV: production
+      PORT: 4000
+      API_VERSION: ${API_VERSION:-v1}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    ports:
+      - "${API_PORT:?API_PORT manquant}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/v1/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  pgdata:
+
+networks:
+  backend:
