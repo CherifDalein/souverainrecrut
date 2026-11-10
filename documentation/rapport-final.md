@@ -269,18 +269,22 @@ Sorties complètes : [`deploiement/reports/`](../deploiement/reports/).
 ### 9.4 Projet GitLab et secrets (4.4)
 
 - **Projet privé** `souverainrecrut-deploy` : il exécute le déploiement ; le code est identique à celui du dépôt GitHub (livrable public), poussé sur un second *remote*. Le fichier de pipeline est `deploiement/.gitlab-ci.yml` (chemin configuré dans le projet).
-- **Branche `Dev` protégée** : les variables CI/CD sont *Protected*, donc transmises uniquement aux pipelines de la branche protégée.
+- **Variables CI/CD** : stockées dans le projet privé, jamais dans le dépôt. Elles ne sont pas restreintes aux branches protégées (option *Protected* désactivée) afin d'être disponibles sur la branche de travail `Dev`.
 - **Runner** `mac-cherif-utm` (exécuteur *shell*, tag `souverainrecrut-mac`) : voir la justification en section 7.
 
-| Variable | Type | Portée | Visibilité |
-|---|---|---|---|
-| `DEPLOY_HOST`, `DEPLOY_USER` | Variable | tous environnements | visible |
-| `SSH_PRIVATE_KEY` | File | tous environnements | non affichée par les scripts |
-| `SSH_KNOWN_HOSTS` | File | tous environnements | clé publique du serveur (non secrète) |
-| `DOCKERHUB_USER` | Variable | tous environnements | visible |
-| `DOCKERHUB_TOKEN` | Variable | tous environnements | masquée – token Docker Hub **en lecture seule** |
-| `POSTGRES_PASSWORD`, `JWT_SECRET` | Variable | **`staging`** | masquées |
-| `POSTGRES_PASSWORD`, `JWT_SECRET` | Variable | **`production`** | masquées, valeurs différentes du staging |
+| Variable | Type | Portée | Visibilité | Usage |
+|---|---|---|---|---|
+| `DEPLOY_HOST`, `DEPLOY_USER` | Variable | tous environnements | visible | adresse et utilisateur SSH du serveur |
+| `DEPLOY_USER_PASSWORD` | Variable | tous environnements | visible | mot de passe de l'utilisateur, ajouté lors du dépannage de la connexion SSH sur suggestion du formateur ; **non utilisé par les scripts**, l'authentification se fait par clé |
+| `SSH_PRIVATE_KEY` | File | tous environnements | non affichée par les scripts | clé privée de déploiement |
+| `SSH_KNOWN_HOSTS` | File | tous environnements | – | clé publique du serveur (non secrète) |
+| `DOCKERHUB_USER` | Variable | tous environnements | masquée | compte Docker Hub |
+| `DOCKERHUB_TOKEN` | Variable | tous environnements | masquée | token Docker Hub **en lecture seule** |
+| `POSTGRES_PASSWORD`, `JWT_SECRET` | Variable | **`staging`** | masquées | secrets du staging |
+| `POSTGRES_PASSWORD`, `JWT_SECRET` | Variable | **`production`** | masquées | secrets de la production, distincts du staging |
+
+![Variables CI/CD GitLab](../deploiement/captures/06-gitlab-variables-ci-cd.png)
+*Figure 13 – Variables CI/CD du projet GitLab : valeurs masquées, secrets de la base et du JWT portés par environnement (`staging`, `production`), clé SSH et empreinte du serveur en type File.*
 
 Le même nom de variable avec une portée par environnement applique le principe « une même image, une configuration par environnement ». L'identité du serveur est vérifiée à chaque connexion (`StrictHostKeyChecking=yes` avec `SSH_KNOWN_HOSTS`).
 
@@ -337,21 +341,21 @@ Le tag à déployer est saisi au lancement (input `image_tag`). Les secrets sont
 **Contrôle : une image non publiée par Jenkins est refusée.** Un pipeline lancé sur un commit dont l'image n'existe pas sur Docker Hub s'arrête à la validation, sans rien déployer.
 
 ![Pipeline arrêté à la validation](../deploiement/captures/01-gitlab-pipeline-tag-absent-refuse.png)
-*Figure 13 – Pipeline déclenché par un push : `validate-image` échoue, les étapes de déploiement ne s'exécutent pas.*
+*Figure 14 – Pipeline déclenché par un push : `validate-image` échoue, les étapes de déploiement ne s'exécutent pas.*
 
 ![Log de validate-image](../deploiement/captures/02-gitlab-validate-image-404.png)
-*Figure 14 – Docker Hub répond 404 pour `sha-9bd89c5` : l'image n'a pas passé la chaîne Jenkins, le déploiement est refusé.*
+*Figure 15 – Docker Hub répond 404 pour `sha-9bd89c5` : l'image n'a pas passé la chaîne Jenkins, le déploiement est refusé.*
 
 **Approbation manuelle avant la production.** Après un staging validé, le pipeline attend une action humaine.
 
 ![Pipeline en attente d'approbation](../deploiement/captures/03-gitlab-pipeline-attente-approbation.png)
-*Figure 15 – Staging déployé et testé ; `deploy-prod` attend l'approbation (bouton ▶).*
+*Figure 16 – Staging déployé et testé ; `deploy-prod` attend l'approbation (bouton ▶).*
 
 ![Pipeline complet](../deploiement/captures/04-gitlab-pipeline-staging-prod-succes.png)
-*Figure 16 – Pipeline complet : validation, staging, tests, production approuvée et tests de production au vert. `rollback-prod` reste disponible.*
+*Figure 17 – Pipeline complet : validation, staging, tests, production approuvée et tests de production au vert. `rollback-prod` reste disponible.*
 
 ![Conteneurs sur la VM](../deploiement/captures/05-vm-conteneurs-staging-prod.png)
-*Figure 17 – Sur la VM : les conteneurs staging (port 4001) et production (port 4000), tous `healthy`, avec la même image `sha-c1e56f9`.*
+*Figure 18 – Sur la VM : les conteneurs staging (port 4001) et production (port 4000), tous `healthy`, avec la même image `sha-c1e56f9`.*
 
 **Isolation des environnements** (vérifiée sur la VM) :
 
