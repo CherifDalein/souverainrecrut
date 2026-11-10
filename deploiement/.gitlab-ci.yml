@@ -1,0 +1,113 @@
+# ==========================================================
+# Pipeline de déploiement SouverainRecrut (cahier des charges 4.4 et 5.3)
+#
+#   validation du tag -> staging (auto) -> tests de fumée
+#        -> approbation manuelle -> production -> tests de fumée
+#
+# L'image est publiée par Jenkins sur Docker Hub : ce pipeline ne
+# reconstruit jamais l'image, il la récupère par son tag.
+#
+# Runner : runner "shell" enregistré sur le Mac qui héberge la VM
+# (la VM est en réseau privé, inaccessible aux runners partagés).
+#
+# Variables CI/CD (Settings > CI/CD > Variables), jamais dans le dépôt :
+#   DEPLOY_HOST, DEPLOY_USER                  adresse et utilisateur SSH
+#   SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS (File)   clé de déploiement, empreinte du serveur
+#   DOCKERHUB_USER, DOCKERHUB_TOKEN           token Docker Hub en lecture seule
+#   POSTGRES_PASSWORD, JWT_SECRET             une valeur par environnement
+#                                             (portée staging / production)
+# ==========================================================
+
+stages:
+  - validate
+  - staging
+  - production
+
+variables:
+  BACKEND_IMAGE: cherifdiallo725/souverainrecrut-backend
+  IMAGE_TAG:
+    value: ""
+    description: "Tag Docker Hub à déployer (ex. sha-c1e56f9). Vide : image du commit courant."
+
+default:
+  tags: [souverainrecrut-mac]
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"     # lancement manuel (Build > Pipelines > Run pipeline)
+    - if: $CI_COMMIT_BRANCH == "Dev"       # push sur la branche de travail
+
+# ----------------------------------------------------------
+# 1. Validation du tag : format et présence sur Docker Hub
+# ----------------------------------------------------------
+validate-image:
+  stage: validate
+  script:
+    - TAG="${IMAGE_TAG:-sha-${CI_COMMIT_SHA:0:7}}"
+    - echo "Image demandée : ${BACKEND_IMAGE}:${TAG}"
+    - |
+      if ! [[ "$TAG" =~ ^(sha-[0-9a-f]{7}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?)$ ]]; then
+        echo "Tag invalide : ${TAG} (attendu sha-xxxxxxx ou X.Y.Z[-N]). 'latest' est refusé." >&2
+        exit 1
+      fi
+    - |
+      if ! curl -fsS "https://hub.docker.com/v2/repositories/${BACKEND_IMAGE}/tags/${TAG}" -o tag.json; then
+        echo "Le tag ${TAG} n'existe pas sur Docker Hub (l'image a-t-elle passé le pipeline Jenkins ?)" >&2
+        exit 1
+      fi
+    - echo "Digest   : $(grep -o '"digest":"sha256:[0-9a-f]*"' tag.json | head -1)"
+    - echo "DEPLOY_TAG=${TAG}" > deploy.env
+  artifacts:
+    reports:
+      dotenv: deploy.env
+
+# ----------------------------------------------------------
+# 2. Staging : déploiement automatique puis tests de fumée
+# ----------------------------------------------------------
+deploy-staging:
+  stage: staging
+  environment:
+    name: staging
+    url: http://$DEPLOY_HOST:4001/v1/health
+  script:
+    - deploiement/scripts/deploy.sh staging "$DEPLOY_TAG"
+
+smoke-staging:
+  stage: staging
+  needs: [deploy-staging]
+  script:
+    # Échec des tests : retour automatique à la version précédente
+    - deploiement/scripts/smoke-test.sh staging || { deploiement/scripts/rollback.sh staging; exit 1; }
+
+# ----------------------------------------------------------
+# 3. Production : approbation manuelle, déploiement, vérification
+# ----------------------------------------------------------
+deploy-prod:
+  stage: production
+  needs: [validate-image, smoke-staging]
+  when: manual            # approbation humaine ; le pipeline reste bloqué en attendant
+  allow_failure: false
+  environment:
+    name: production
+    url: http://$DEPLOY_HOST:4000/v1/health
+  script:
+    - echo "Mise en production de ${DEPLOY_TAG} approuvée par ${GITLAB_USER_LOGIN} (${GITLAB_USER_NAME})"
+    - deploiement/scripts/deploy.sh prod "$DEPLOY_TAG"
+
+smoke-prod:
+  stage: production
+  needs: [deploy-prod]
+  script:
+    - deploiement/scripts/smoke-test.sh prod || { deploiement/scripts/rollback.sh prod; exit 1; }
+
+# Rollback manuel de la production (procédure 5.4)
+rollback-prod:
+  stage: production
+  needs: [deploy-prod]
+  when: manual
+  allow_failure: true
+  environment:
+    name: production
+    action: access
+  script:
+    - deploiement/scripts/rollback.sh prod "${ROLLBACK_TAG:-}"
