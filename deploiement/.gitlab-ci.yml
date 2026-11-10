@@ -44,7 +44,7 @@ validate-image:
   stage: validate
   script:
     - TAG="${IMAGE_TAG:-sha-${CI_COMMIT_SHA:0:7}}"
-    - echo "Image demandée : ${BACKEND_IMAGE}:${TAG}"
+    - 'echo "Image demandée : ${BACKEND_IMAGE}:${TAG}"'
     - |
       if ! [[ "$TAG" =~ ^(sha-[0-9a-f]{7}|[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?)$ ]]; then
         echo "Tag invalide : ${TAG} (attendu sha-xxxxxxx ou X.Y.Z[-N]). 'latest' est refusé." >&2
@@ -55,7 +55,8 @@ validate-image:
         echo "Le tag ${TAG} n'existe pas sur Docker Hub (l'image a-t-elle passé le pipeline Jenkins ?)" >&2
         exit 1
       fi
-    - echo "Digest   : $(grep -o '"digest":"sha256:[0-9a-f]*"' tag.json | head -1)"
+    - |
+      echo "Digest   : $(grep -o '"digest":"sha256:[0-9a-f]*"' tag.json | head -1)"
     - echo "DEPLOY_TAG=${TAG}" > deploy.env
   artifacts:
     reports:
