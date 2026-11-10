@@ -215,7 +215,10 @@ GitLab (projet privé)              ▼
 | Administration | SSH activé et vérifié | OpenSSH, connexion **par clé uniquement** depuis le Mac |
 
 - Accès SSH par une **clé ED25519 dédiée au déploiement** (`~/.ssh/souverainrecrut_deploy`), distincte de toute clé personnelle. Après une exposition accidentelle, cette clé a été remplacée (rotation) et l'ancienne retirée de `authorized_keys`.
-- **Snapshot** : `À COMPLÉTER – clone UTM de la VM éteinte (capture).`
+- **Snapshot** : UTM ne propose pas de snapshot à chaud comme VMware ; l'équivalent est un **clone de la VM éteinte** (`ubuntu-cicd 2`), copie complète du disque et de la configuration. Il a été réalisé **après** le déploiement et le test du rollback, et non avant la configuration comme le prévoit le cahier des charges : il constitue un point de restauration de l'état validé (Docker installé, staging et production déployés). Le clone reste éteint pour éviter un conflit d'adresse IP avec la VM d'origine.
+
+![VM et son clone dans UTM](../deploiement/captures/00-utm-vm-et-clone-snapshot.png)
+*Figure 13 bis – UTM : la VM de déploiement `ubuntu-cicd` et son clone de sauvegarde `ubuntu-cicd 2`.*
 
 ### 9.2 Terraform (4.2)
 
