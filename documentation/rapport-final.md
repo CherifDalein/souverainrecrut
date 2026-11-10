@@ -218,7 +218,7 @@ GitLab (projet privé)              ▼
 - **Snapshot** : UTM ne propose pas de snapshot à chaud comme VMware ; l'équivalent est un **clone de la VM éteinte** (`ubuntu-cicd 2`), copie complète du disque et de la configuration. Il a été réalisé **après** le déploiement et le test du rollback, et non avant la configuration comme le prévoit le cahier des charges : il constitue un point de restauration de l'état validé (Docker installé, staging et production déployés). Le clone reste éteint pour éviter un conflit d'adresse IP avec la VM d'origine.
 
 ![VM et son clone dans UTM](../deploiement/captures/00-utm-vm-et-clone-snapshot.png)
-*Figure 13 bis – UTM : la VM de déploiement `ubuntu-cicd` et son clone de sauvegarde `ubuntu-cicd 2`.*
+*Figure 13 – UTM : la VM de déploiement `ubuntu-cicd` et son clone de sauvegarde `ubuntu-cicd 2`.*
 
 ### 9.2 Terraform (4.2)
 
@@ -287,7 +287,7 @@ Sorties complètes : [`deploiement/reports/`](../deploiement/reports/).
 | `POSTGRES_PASSWORD`, `JWT_SECRET` | Variable | **`production`** | masquées | secrets de la production, distincts du staging |
 
 ![Variables CI/CD GitLab](../deploiement/captures/06-gitlab-variables-ci-cd.png)
-*Figure 13 – Variables CI/CD du projet GitLab : valeurs masquées, secrets de la base et du JWT portés par environnement (`staging`, `production`), clé SSH et empreinte du serveur en type File.*
+*Figure 14 – Variables CI/CD du projet GitLab : valeurs masquées, secrets de la base et du JWT portés par environnement (`staging`, `production`), clé SSH et empreinte du serveur en type File.*
 
 Le même nom de variable avec une portée par environnement applique le principe « une même image, une configuration par environnement ». L'identité du serveur est vérifiée à chaque connexion (`StrictHostKeyChecking=yes` avec `SSH_KNOWN_HOSTS`).
 
@@ -344,21 +344,21 @@ Le tag à déployer est saisi au lancement (input `image_tag`). Les secrets sont
 **Contrôle : une image non publiée par Jenkins est refusée.** Un pipeline lancé sur un commit dont l'image n'existe pas sur Docker Hub s'arrête à la validation, sans rien déployer.
 
 ![Pipeline arrêté à la validation](../deploiement/captures/01-gitlab-pipeline-tag-absent-refuse.png)
-*Figure 14 – Pipeline déclenché par un push : `validate-image` échoue, les étapes de déploiement ne s'exécutent pas.*
+*Figure 15 – Pipeline déclenché par un push : `validate-image` échoue, les étapes de déploiement ne s'exécutent pas.*
 
 ![Log de validate-image](../deploiement/captures/02-gitlab-validate-image-404.png)
-*Figure 15 – Docker Hub répond 404 pour `sha-9bd89c5` : l'image n'a pas passé la chaîne Jenkins, le déploiement est refusé.*
+*Figure 16 – Docker Hub répond 404 pour `sha-9bd89c5` : l'image n'a pas passé la chaîne Jenkins, le déploiement est refusé.*
 
 **Approbation manuelle avant la production.** Après un staging validé, le pipeline attend une action humaine.
 
 ![Pipeline en attente d'approbation](../deploiement/captures/03-gitlab-pipeline-attente-approbation.png)
-*Figure 16 – Staging déployé et testé ; `deploy-prod` attend l'approbation (bouton ▶).*
+*Figure 17 – Staging déployé et testé ; `deploy-prod` attend l'approbation (bouton ▶).*
 
 ![Pipeline complet](../deploiement/captures/04-gitlab-pipeline-staging-prod-succes.png)
-*Figure 17 – Pipeline complet : validation, staging, tests, production approuvée et tests de production au vert. `rollback-prod` reste disponible.*
+*Figure 18 – Pipeline complet : validation, staging, tests, production approuvée et tests de production au vert. `rollback-prod` reste disponible.*
 
 ![Conteneurs sur la VM](../deploiement/captures/05-vm-conteneurs-staging-prod.png)
-*Figure 18 – Sur la VM : les conteneurs staging (port 4001) et production (port 4000), tous `healthy`, avec la même image `sha-c1e56f9`.*
+*Figure 19 – Sur la VM : les conteneurs staging (port 4001) et production (port 4000), tous `healthy`, avec la même image `sha-c1e56f9`.*
 
 **Isolation des environnements** (vérifiée sur la VM) :
 
@@ -415,20 +415,20 @@ Les deux environnements partagent une même VM faute de ressources (8 Go de RAM)
 |---|---|---|---|
 | 1 | Pipeline avec `image_tag = sha-8d97f20` (v1) | prod en `sha-8d97f20` | ✅ déployée à 11:20:52, pipeline #3049309029 |
 | 2 | `donnees-test.sh prod create` | candidat créé | ✅ HTTP 201, 1 candidat en base |
-| 3 | Pipeline avec `image_tag = sha-c1e56f9` (v2) | log : `Version actuelle : sha-8d97f20` | ✅ v1 mémorisée ; mise en production approuvée par `mcd2020etude` (figure 19) |
-| 4 | Job `rollback-prod` | log : `Rollback prod : sha-c1e56f9 -> sha-8d97f20` | ✅ seuls `backend` et `migrate` recréés ; PostgreSQL reste en fonctionnement (*Up 29 minutes*) (figures 20 et 21) |
+| 3 | Pipeline avec `image_tag = sha-c1e56f9` (v2) | log : `Version actuelle : sha-8d97f20` | ✅ v1 mémorisée ; mise en production approuvée par `mcd2020etude` (figure 20) |
+| 4 | Job `rollback-prod` | log : `Rollback prod : sha-c1e56f9 -> sha-8d97f20` | ✅ seuls `backend` et `migrate` recréés ; PostgreSQL reste en fonctionnement (*Up 29 minutes*) (figures 21 et 22) |
 | 5 | `donnees-test.sh prod check` + tests de fumée | version `sha-8d97f20`, candidat présent | ✅ version `sha-8d97f20`, candidat présent, 5 tests de fumée OK |
 
 Au passage, un tag saisi avec une espace finale (`"sha-c1e56f9 "`) a été refusé par `validate-image` avant tout déploiement : la validation protège aussi des erreurs de saisie.
 
 ![Déploiement de la v2](../deploiement/captures/07-rollback-deploy-v2-version-precedente.png)
-*Figure 19 – Déploiement de la v2 en production : approbation tracée (ligne 17) et version remplacée mémorisée (`Version actuelle : sha-8d97f20`, ligne 20). L'avertissement Docker sur le stockage du token est sans effet durable : le script exécute `docker logout` après le téléchargement.*
+*Figure 20 – Déploiement de la v2 en production : approbation tracée (ligne 17) et version remplacée mémorisée (`Version actuelle : sha-8d97f20`, ligne 20). L'avertissement Docker sur le stockage du token est sans effet durable : le script exécute `docker logout` après le téléchargement.*
 
 ![Début du rollback](../deploiement/captures/08-rollback-prod-debut.png)
-*Figure 20 – Job `rollback-prod` : retour de `sha-c1e56f9` vers `sha-8d97f20`, téléchargement de l'image v1.*
+*Figure 21 – Job `rollback-prod` : retour de `sha-c1e56f9` vers `sha-8d97f20`, téléchargement de l'image v1.*
 
 ![Fin du rollback](../deploiement/captures/09-rollback-prod-fin.png)
-*Figure 21 – Fin du rollback : `backend` en `sha-8d97f20`, migrations rejouées sans erreur (`Exited (0)`), PostgreSQL non redémarré, donc données conservées.*
+*Figure 22 – Fin du rollback : `backend` en `sha-8d97f20`, migrations rejouées sans erreur (`Exited (0)`), PostgreSQL non redémarré, donc données conservées.*
 
 Résultat de la vérification après rollback :
 
