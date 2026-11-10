@@ -6,7 +6,7 @@
 **Image** https://hub.docker.com/r/cherifdiallo725/souverainrecrut-backend
 
 > Partie 1 (Jour 1) – Intégration continue avec Jenkins : **réalisée**.
-> Partie 2 (Jour 2) – Provisionnement et déploiement : à compléter.
+> Partie 2 (Jour 2) – Provisionnement et déploiement : **réalisée** (test du rollback à compléter).
 
 ---
 
@@ -166,6 +166,266 @@ Preuves : [`integration-continue/reports/`](../integration-continue/reports/) et
 
 ---
 
-## Partie 2 – Provisionnement et déploiement
+# Partie 2 – Provisionnement et déploiement
 
-*À compléter (Jour 2) : VMware / Ubuntu Server, Terraform, Ansible, GitLab CI/CD, Docker Compose + PostgreSQL, vérification et rollback.*
+## 7. Objectif et contraintes de l'environnement
+
+À l'issue de cette partie, l'API Backend doit être **accessible sur un serveur Ubuntu et communiquer avec PostgreSQL**, déployée par un pipeline GitLab CI/CD à partir de l'image publiée par Jenkins (cahier des charges, sections 4 et 5).
+
+Le travail a été réalisé sur un **Mac Apple Silicon (M1, 8 Go de RAM)**, sans serveur ni VPS. Cette contrainte a orienté trois choix :
+
+| Contrainte | Conséquence | Choix retenu |
+|---|---|---|
+| ESXi et VMware Workstation n'existent que pour processeurs x86 | Le provider Terraform vSphere est inutilisable | VM créée manuellement, Terraform appliqué aux ressources disponibles (cas prévu au 4.2) |
+| VMware Fusion 25H2 et 26H1u1 plantent au démarrage sur macOS 27 (« unrecoverable error », journaux conservés) | Pas d'hyperviseur VMware utilisable | VM créée avec **UTM**, hyperviseur natif Apple Silicon |
+| La VM est sur un réseau privé (`192.168.64.0/24`) propre au Mac | Les runners partagés de gitlab.com ne peuvent pas s'y connecter en SSH | **Runner GitLab enregistré sur le Mac**, sur le même réseau que la VM, sans exposer la VM sur Internet |
+
+L'image Backend est publiée en `linux/arm64` ; la VM étant aussi en ARM64 (`aarch64`), elle est utilisée sans reconstruction.
+
+## 8. Architecture de déploiement
+
+```
+GitHub (Dev) ─▶ Jenkins ─▶ Docker Hub : cherifdiallo725/souverainrecrut-backend:sha-<commit>
+                                   │  docker pull (token en lecture seule)
+GitLab (projet privé)              ▼
+  pipeline ─▶ runner (Mac) ──SSH──▶ VM Ubuntu 24.04 ARM64 (UTM, 192.168.64.2)
+                                     ├── /opt/souverainrecrut/staging  : backend :4001 + PostgreSQL
+                                     └── /opt/souverainrecrut/prod     : backend :4000 + PostgreSQL
+```
+
+| Étape | Outil | Fichiers |
+|---|---|---|
+| Serveur | UTM, Ubuntu Server 24.04 | création manuelle |
+| Description de l'infrastructure | Terraform | [`deploiement/terraform/`](../deploiement/terraform/) |
+| Configuration du serveur | Ansible | [`deploiement/ansible/`](../deploiement/ansible/) |
+| Orchestration applicative | Docker Compose | [`deploiement/deployment/`](../deploiement/deployment/) |
+| Déploiement | GitLab CI/CD + scripts | [`deploiement/.gitlab-ci.yml`](../deploiement/.gitlab-ci.yml), [`deploiement/scripts/`](../deploiement/scripts/) |
+
+## 9. Travaux réalisés
+
+### 9.1 Préparation de la VM (4.1)
+
+| Ressource | Demandé | Obtenu |
+|---|---|---|
+| Système | Ubuntu Server 24.04 LTS | Ubuntu 24.04.5 LTS, `aarch64` |
+| Processeur | 2 vCPU minimum | 4 vCPU |
+| Mémoire | 4 Go minimum | 3,8 Go utilisables |
+| Stockage | 30 Go minimum | 29 Go (17 Go libres) |
+| Réseau | NAT ou Bridged, accès Internet | *Shared Network* UTM (NAT) |
+| Administration | SSH activé et vérifié | OpenSSH, connexion **par clé uniquement** depuis le Mac |
+
+- Accès SSH par une **clé ED25519 dédiée au déploiement** (`~/.ssh/souverainrecrut_deploy`), distincte de toute clé personnelle. Après une exposition accidentelle, cette clé a été remplacée (rotation) et l'ancienne retirée de `authorized_keys`.
+- **Snapshot** : `À COMPLÉTER – clone UTM de la VM éteinte (capture).`
+
+### 9.2 Terraform (4.2)
+
+Le provider vSphere étant inutilisable sans ESXi, Terraform gère les ressources réellement disponibles :
+
+| Ressource | Rôle |
+|---|---|
+| `terraform_data.ssh_check` | Vérifie que la VM est joignable en SSH **par clé** (`BatchMode`) avant toute configuration |
+| `local_file.ansible_inventory` | Génère l'inventaire Ansible à partir des variables : **pont Terraform → Ansible** |
+
+Fichiers : `providers.tf`, `variables.tf` (IP validée par expression régulière), `main.tf`, `outputs.tf`. Les valeurs locales sont dans `terraform.tfvars`, **exclu de Git** ; la clé privée n'est jamais lue par Terraform (seul son chemin est transmis), elle n'apparaît donc pas dans le *state*.
+
+```
+$ terraform plan
+Plan: 2 to add, 0 to change, 0 to destroy.
+
+$ terraform apply
+terraform_data.ssh_check (local-exec): SSH OK : usercicd-QEMU-Virtual-Machine – aarch64 – Ubuntu 24.04.5 LTS
+Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+
+Outputs:
+api_urls = {
+  "prod"    = "http://192.168.64.2:4000/v1/health"
+  "staging" = "http://192.168.64.2:4001/v1/health"
+}
+server_ip   = "192.168.64.2"
+ssh_command = "ssh -i ~/.ssh/souverainrecrut_deploy usercicd@192.168.64.2"
+```
+
+### 9.3 Ansible (4.3)
+
+[`playbook.yml`](../deploiement/ansible/playbook.yml), exécuté avec `ansible-playbook playbook.yml -K` :
+
+| Consigne | Tâches |
+|---|---|
+| Mettre à jour le système et installer les dépendances | `apt update` + `upgrade`, `ca-certificates`, `curl`, `gnupg` |
+| Installer Docker Engine et le plugin Compose | dépôt officiel Docker (clé GPG vérifiée, architecture détectée), `docker-ce`, `docker-compose-plugin` |
+| Activer et démarrer Docker | `systemctl enable --now docker` |
+| Créer le répertoire de déploiement | `/opt/souverainrecrut/staging` et `/opt/souverainrecrut/prod` (propriétaire `usercicd`, droits `0750`) |
+| Vérifier le fonctionnement | `docker version`, `docker compose version`, conteneur `hello-world` |
+
+L'utilisateur de déploiement est ajouté au groupe `docker` : le pipeline pilote Docker **sans `sudo`**, aucun mot de passe administrateur n'est stocké dans GitLab.
+
+| Exécution | Résultat | Signification |
+|---|---|---|
+| 1re | `ok=13 changed=7 failed=0` | Serveur configuré : Docker 29.9.3, Compose 5.7.0, conteneur de test OK |
+| 2e | `ok=13 changed=0 failed=0` | **Idempotence** : relancer le playbook ne modifie rien |
+
+Sorties complètes : [`deploiement/reports/`](../deploiement/reports/).
+
+### 9.4 Projet GitLab et secrets (4.4)
+
+- **Projet privé** `souverainrecrut-deploy` : il exécute le déploiement ; le code est identique à celui du dépôt GitHub (livrable public), poussé sur un second *remote*. Le fichier de pipeline est `deploiement/.gitlab-ci.yml` (chemin configuré dans le projet).
+- **Branche `Dev` protégée** : les variables CI/CD sont *Protected*, donc transmises uniquement aux pipelines de la branche protégée.
+- **Runner** `mac-cherif-utm` (exécuteur *shell*, tag `souverainrecrut-mac`) : voir la justification en section 7.
+
+| Variable | Type | Portée | Visibilité |
+|---|---|---|---|
+| `DEPLOY_HOST`, `DEPLOY_USER` | Variable | tous environnements | visible |
+| `SSH_PRIVATE_KEY` | File | tous environnements | non affichée par les scripts |
+| `SSH_KNOWN_HOSTS` | File | tous environnements | clé publique du serveur (non secrète) |
+| `DOCKERHUB_USER` | Variable | tous environnements | visible |
+| `DOCKERHUB_TOKEN` | Variable | tous environnements | masquée – token Docker Hub **en lecture seule** |
+| `POSTGRES_PASSWORD`, `JWT_SECRET` | Variable | **`staging`** | masquées |
+| `POSTGRES_PASSWORD`, `JWT_SECRET` | Variable | **`production`** | masquées, valeurs différentes du staging |
+
+Le même nom de variable avec une portée par environnement applique le principe « une même image, une configuration par environnement ». L'identité du serveur est vérifiée à chaque connexion (`StrictHostKeyChecking=yes` avec `SSH_KNOWN_HOSTS`).
+
+### 9.5 Récupération de l'image et Docker Compose (5.1, 5.2)
+
+Le serveur **ne reconstruit jamais l'image** : il la télécharge depuis Docker Hub par son tag (`docker compose pull`).
+
+[`docker-compose.yml`](../deploiement/deployment/docker-compose.yml) — un seul fichier pour tous les environnements, seules les valeurs du `.env` changent :
+
+| Consigne du 5.2 | Mise en œuvre |
+|---|---|
+| Image versionnée de Docker Hub | `image: ${BACKEND_IMAGE}:${IMAGE_TAG}`, aucune directive `build` |
+| Variables de l'API et de Prisma | `DATABASE_URL`, `JWT_SECRET`, `PORT`, `NODE_ENV`… depuis `.env` (modèle : [`.env.example`](../deploiement/deployment/.env.example)) |
+| Volume persistant, réseau adapté | volume `pgdata` ; réseau `backend` ; **PostgreSQL ne publie aucun port** |
+| Redémarrage et contrôles de santé | `restart: unless-stopped` ; `pg_isready` et `/v1/health` |
+| Migrations Prisma maîtrisées | service ponctuel `migrate` (`prisma migrate deploy`) lancé **après** que PostgreSQL est sain et **avant** l'API ; si la migration échoue, l'API ne démarre pas |
+
+Premier déploiement manuel en staging (validation avant automatisation) :
+
+```
+$ docker compose ps -a
+souverainrecrut-staging-backend-1    …:sha-c1e56f9   Up (healthy)    0.0.0.0:4001->4000/tcp
+souverainrecrut-staging-migrate-1    …:sha-c1e56f9   Exited (0)
+souverainrecrut-staging-postgres-1   postgres:16-alpine   Up (healthy)   5432/tcp
+
+$ docker compose logs migrate
+All migrations have been successfully applied.
+
+$ curl http://192.168.64.2:4001/v1/ready
+{"success":true,"data":{"status":"READY","database":"CONNECTED", …}}
+```
+
+Tables créées par la migration : `users`, `candidates`, `jobs`, `applications` (+ `_prisma_migrations`).
+
+### 9.6 Pipeline de déploiement GitLab CI/CD (5.3)
+
+```
+validate-image ─▶ deploy-staging ─▶ smoke-staging ─▶ [ ▶ deploy-prod ] ─▶ smoke-prod
+                                     échec : rollback auto   (manuel)       échec : rollback auto
+                                                          rollback-prod (manuel)
+```
+
+| Job | Rôle |
+|---|---|
+| `validate-image` | Vérifie le format du tag (`sha-xxxxxxx` ou `X.Y.Z[-N]`, `latest` refusé) et **sa présence sur Docker Hub** |
+| `deploy-staging` | Connexion SSH, copie du Compose, génération du `.env`, `docker login` (lecture seule), `pull`, `up -d`, `docker logout` |
+| `smoke-staging` | 5 tests de fumée ; en cas d'échec, retour automatique à la version précédente |
+| `deploy-prod` | **Approbation manuelle** : le pipeline reste bloqué jusqu'à la validation |
+| `smoke-prod` | Mêmes tests en production, avec rollback automatique |
+| `rollback-prod` | Retour arrière manuel de la production |
+
+Le tag à déployer est saisi au lancement (input `image_tag`). Les secrets sont transmis au serveur **par l'entrée standard de SSH** : ils n'apparaissent ni dans les logs ni dans la liste des processus. Chaque déploiement est journalisé sur le serveur (`/opt/souverainrecrut/deploy-history.log`).
+
+**Contrôle : une image non publiée par Jenkins est refusée.** Un pipeline lancé sur un commit dont l'image n'existe pas sur Docker Hub s'arrête à la validation, sans rien déployer.
+
+![Pipeline arrêté à la validation](../deploiement/captures/01-gitlab-pipeline-tag-absent-refuse.png)
+*Figure 13 – Pipeline déclenché par un push : `validate-image` échoue, les étapes de déploiement ne s'exécutent pas.*
+
+![Log de validate-image](../deploiement/captures/02-gitlab-validate-image-404.png)
+*Figure 14 – Docker Hub répond 404 pour `sha-9bd89c5` : l'image n'a pas passé la chaîne Jenkins, le déploiement est refusé.*
+
+**Approbation manuelle avant la production.** Après un staging validé, le pipeline attend une action humaine.
+
+![Pipeline en attente d'approbation](../deploiement/captures/03-gitlab-pipeline-attente-approbation.png)
+*Figure 15 – Staging déployé et testé ; `deploy-prod` attend l'approbation (bouton ▶).*
+
+![Pipeline complet](../deploiement/captures/04-gitlab-pipeline-staging-prod-succes.png)
+*Figure 16 – Pipeline complet : validation, staging, tests, production approuvée et tests de production au vert. `rollback-prod` reste disponible.*
+
+![Conteneurs sur la VM](../deploiement/captures/05-vm-conteneurs-staging-prod.png)
+*Figure 17 – Sur la VM : les conteneurs staging (port 4001) et production (port 4000), tous `healthy`, avec la même image `sha-c1e56f9`.*
+
+**Isolation des environnements** (vérifiée sur la VM) :
+
+| | Staging | Production |
+|---|---|---|
+| Port de l'API | 4001 — `READY` / `CONNECTED` | 4000 — `READY` / `CONNECTED` |
+| Image | `sha-c1e56f9` | `sha-c1e56f9` (celle testée en staging) |
+| Volume PostgreSQL | `souverainrecrut-staging_pgdata` | `souverainrecrut-prod_pgdata` |
+| Réseau Docker | `souverainrecrut-staging_backend` | `souverainrecrut-prod_backend` |
+| Secrets | jeu `staging` | jeu `production` (distinct) |
+
+**Trace d'audit** (`deploy-history.log`) :
+
+```
+2026-11-10T10:54:39Z env=staging action=deploy tag=sha-c1e56f9 precedent=sha-c1e56f9 par=mcd2020etude pipeline=…/pipelines/3049068205
+2026-11-10T10:56:27Z env=prod    action=deploy tag=sha-c1e56f9 precedent=aucun       par=mcd2020etude pipeline=…/pipelines/3049068205
+```
+
+Les deux environnements partagent une même VM faute de ressources (8 Go de RAM) ; en production réelle, ils seraient sur deux serveurs : il suffirait d'ajouter un hôte à l'inventaire et de donner une portée par environnement à `DEPLOY_HOST`.
+
+### 9.7 Vérification et rollback (5.4)
+
+**Vérification de l'API et de la base.** Les tests de fumée ([`smoke-test.sh`](../deploiement/scripts/smoke-test.sh)) contrôlent à chaque déploiement :
+
+```
+==> Tests de fumée staging : http://192.168.64.2:4001/v1
+    OK   API démarrée (/health -> 200)
+    OK   Base de données connectée (/ready -> 200)
+    OK   Informations de l'API (/info -> 200)
+    OK   Route protégée sans token (/candidates -> 401)
+    OK   Route inconnue (/route-inconnue -> 404)
+==> staging validé
+```
+
+**Endpoints métier et persistance.** Le script [`donnees-test.sh`](../deploiement/scripts/donnees-test.sh) crée un compte administrateur de test, s'authentifie (`/auth/login`, JWT), crée un candidat via l'API puis le relit :
+
+```
+==> [staging] Connexion OK, création d'un candidat via l'API
+    candidat créé (HTTP 201)
+==> [staging] Vérification des données
+    version déployée : sha-c1e56f9
+    authentification : OK
+    candidats en base : 1
+    OK : le candidat de test est présent
+```
+
+**Procédure de rollback.** [`rollback.sh`](../deploiement/scripts/rollback.sh) remplace uniquement `IMAGE_TAG` dans le `.env` du serveur et relance le service `backend` : les secrets et le volume PostgreSQL restent en place, les données sont conservées. La version précédente est mémorisée automatiquement à chaque déploiement (`.previous_tag`) ; un tag précis peut aussi être indiqué. Le rollback est déclenché automatiquement si les tests de fumée échouent, ou manuellement via le job `rollback-prod`.
+
+> Le rollback applicatif n'annule pas les migrations de schéma déjà appliquées. Les migrations doivent donc rester compatibles avec la version précédente (ajouts de colonnes ou de tables plutôt que suppressions ou renommages), comme le rappelle le cahier des charges.
+
+**Test du rollback sur un scénario maîtrisé** — `À COMPLÉTER après exécution` :
+
+| Étape | Action | Résultat attendu | Résultat obtenu |
+|---|---|---|---|
+| 1 | Pipeline avec `image_tag = sha-8d97f20` (build Jenkins #3, v1) | prod en `sha-8d97f20` | |
+| 2 | `donnees-test.sh prod create` | candidat créé | |
+| 3 | Pipeline avec `image_tag = sha-c1e56f9` (build #7, v2) | log : `Version actuelle : sha-8d97f20` | |
+| 4 | Job `rollback-prod` | log : `Rollback prod : sha-c1e56f9 -> sha-8d97f20` | |
+| 5 | `donnees-test.sh prod check` | version `sha-8d97f20`, candidat présent | |
+
+## 10. Exigences de qualité et de sécurité – partie 2
+
+| Exigence | Mise en œuvre |
+|---|---|
+| Reproductibilité | Terraform, playbook Ansible idempotent, Compose et pipeline versionnés ; l'environnement complet se recrée par commandes |
+| Sécurité | Clé SSH dédiée, identité du serveur vérifiée, secrets dans des variables GitLab masquées et protégées, transmis par stdin ; token Docker Hub en lecture seule, déconnecté après usage ; `.env` en `0600` ; PostgreSQL non exposé |
+| Traçabilité | Déploiement par tag `sha-<commit>` relié au code et au build Jenkins ; journal d'audit (qui, quand, quelle version, quel pipeline) ; approbation de la production tracée par GitLab |
+| Déploiement | Le serveur récupère l'image publiée, applique les migrations et démarre l'API avec PostgreSQL |
+| Continuité | Rollback automatique sur échec des tests, rollback manuel de la production, données conservées |
+
+## 11. Limites et pistes d'amélioration – partie 2
+
+- **Terraform** ne crée pas la VM (pas d'ESXi sur Mac ARM) ; avec un hyperviseur compatible, le provider vSphere ou un fournisseur cloud prendrait en charge la création de la machine.
+- **Runner sur le poste de développement** : acceptable pour un environnement de formation ; en entreprise, un runner dédié ou un serveur joignable par les runners partagés.
+- **Staging et production sur la même VM** : isolés logiquement (réseaux, volumes, ports, secrets) mais pas physiquement.
+- **Approbation** : `when: manual` sur l'offre gratuite ; un environnement `production` protégé avec approbateurs désignés (offre Premium) restreindrait la validation à un groupe.
+- **Conformité** : génération d'un SBOM (Syft) et signature de l'image (Cosign) avant déploiement, comme présenté en cours.
