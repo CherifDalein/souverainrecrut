@@ -18,6 +18,15 @@
 #                                             (portée staging / production)
 # ==========================================================
 
+# Champ affiché au lancement manuel (Build > Pipelines > New pipeline)
+spec:
+  inputs:
+    image_tag:
+      description: "Tag Docker Hub à déployer (ex. sha-c1e56f9). Vide : image du commit courant."
+      type: string
+      default: ""
+---
+
 stages:
   - validate
   - staging
@@ -25,9 +34,7 @@ stages:
 
 variables:
   BACKEND_IMAGE: cherifdiallo725/souverainrecrut-backend
-  IMAGE_TAG:
-    value: ""
-    description: "Tag Docker Hub à déployer (ex. sha-c1e56f9). Vide : image du commit courant."
+  IMAGE_TAG: "$[[ inputs.image_tag ]]"
 
 default:
   tags: [souverainrecrut-mac]
