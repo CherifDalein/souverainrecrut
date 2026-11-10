@@ -108,6 +108,23 @@ La couverture est passée de **52,5 %** à **94,4 %**. Le nombre de lignes à co
 
 **Seuils Trivy** : HIGH et CRITICAL bloquants (`--exit-code 1`). Une exception justifiée et datée (`deepmerge-ts`, CLI Prisma, correctif réservé à Prisma 7) est documentée dans `backend/.trivyignore`. Les autres failles ont été corrigées par la mise à jour de l'image de base, `npm audit fix` et un `override` de `effect`.
 
+**Contenu de l'image publiée : le code, jamais les données**
+
+L'image publiée sur Docker Hub ne contient que l'API Backend. La base de données n'est pas publiée : elle est créée sur le serveur au moment du déploiement (partie 2).
+
+| Élément | Emplacement |
+|---|---|
+| Code de l'API compilé et dépendances Node | Image `cherifdiallo725/souverainrecrut-backend` (Docker Hub) |
+| Structure des tables (schéma et migrations Prisma) | Dans l'image : aucune donnée, uniquement la définition des tables |
+| Moteur PostgreSQL | Image officielle `postgres`, publiée par l'équipe PostgreSQL et lancée sur le serveur par Docker Compose |
+| Données (candidats, offres, utilisateurs…) | Volume Docker persistant **sur le serveur**, jamais publié |
+| Secrets (mot de passe de la base, `JWT_SECRET`) | Variables sécurisées du pipeline, puis fichier `.env` sur le serveur ; jamais dans le dépôt ni dans l'image |
+
+Raisons de ce choix :
+- **Sécurité** : une base intégrée à une image publique rendrait les données des candidats téléchargeables par n'importe qui.
+- **Immuabilité** : une image est figée et identique partout, alors qu'une base évolue en permanence. Le code (image) et les données (volume) ont donc des cycles de vie séparés.
+- **Rollback** : on peut revenir à une image Backend antérieure sans perdre les données, puisque le volume reste en place.
+
 **Tags** : `<version>-<n° build>` (ex. `1.0.0-3`) et `sha-<commit>` (ex. `sha-8d97f20`), uniques à chaque build ; labels OCI `revision` et `version` dans l'image. `latest` n'est pas utilisé.
 
 ![Tags Docker Hub](../integration-continue/captures/07-dockerhub-push-manuel-1.0.0-sha-ef9f10e.png)
