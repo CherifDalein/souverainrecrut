@@ -6,7 +6,7 @@
 **Image** https://hub.docker.com/r/cherifdiallo725/souverainrecrut-backend
 
 > Partie 1 (Jour 1) – Intégration continue avec Jenkins : **réalisée**.
-> Partie 2 (Jour 2) – Provisionnement et déploiement : **réalisée** (test du rollback à compléter).
+> Partie 2 (Jour 2) – Provisionnement et déploiement : **réalisée**, rollback testé.
 
 ---
 
@@ -406,15 +406,51 @@ Les deux environnements partagent une même VM faute de ressources (8 Go de RAM)
 
 > Le rollback applicatif n'annule pas les migrations de schéma déjà appliquées. Les migrations doivent donc rester compatibles avec la version précédente (ajouts de colonnes ou de tables plutôt que suppressions ou renommages), comme le rappelle le cahier des charges.
 
-**Test du rollback sur un scénario maîtrisé** — `À COMPLÉTER après exécution` :
+**Test du rollback sur un scénario maîtrisé.** Deux builds Jenkins successifs servent de versions : `sha-8d97f20` (build #3, « v1 ») et `sha-c1e56f9` (build #7, « v2 »).
 
 | Étape | Action | Résultat attendu | Résultat obtenu |
 |---|---|---|---|
-| 1 | Pipeline avec `image_tag = sha-8d97f20` (build Jenkins #3, v1) | prod en `sha-8d97f20` | |
-| 2 | `donnees-test.sh prod create` | candidat créé | |
-| 3 | Pipeline avec `image_tag = sha-c1e56f9` (build #7, v2) | log : `Version actuelle : sha-8d97f20` | |
-| 4 | Job `rollback-prod` | log : `Rollback prod : sha-c1e56f9 -> sha-8d97f20` | |
-| 5 | `donnees-test.sh prod check` | version `sha-8d97f20`, candidat présent | |
+| 1 | Pipeline avec `image_tag = sha-8d97f20` (v1) | prod en `sha-8d97f20` | ✅ déployée à 11:20:52, pipeline #3049309029 |
+| 2 | `donnees-test.sh prod create` | candidat créé | ✅ HTTP 201, 1 candidat en base |
+| 3 | Pipeline avec `image_tag = sha-c1e56f9` (v2) | log : `Version actuelle : sha-8d97f20` | ✅ v1 mémorisée ; mise en production approuvée par `mcd2020etude` (figure 19) |
+| 4 | Job `rollback-prod` | log : `Rollback prod : sha-c1e56f9 -> sha-8d97f20` | ✅ seuls `backend` et `migrate` recréés ; PostgreSQL reste en fonctionnement (*Up 29 minutes*) (figures 20 et 21) |
+| 5 | `donnees-test.sh prod check` + tests de fumée | version `sha-8d97f20`, candidat présent | ✅ version `sha-8d97f20`, candidat présent, 5 tests de fumée OK |
+
+Au passage, un tag saisi avec une espace finale (`"sha-c1e56f9 "`) a été refusé par `validate-image` avant tout déploiement : la validation protège aussi des erreurs de saisie.
+
+![Déploiement de la v2](../deploiement/captures/07-rollback-deploy-v2-version-precedente.png)
+*Figure 19 – Déploiement de la v2 en production : approbation tracée (ligne 17) et version remplacée mémorisée (`Version actuelle : sha-8d97f20`, ligne 20). L'avertissement Docker sur le stockage du token est sans effet durable : le script exécute `docker logout` après le téléchargement.*
+
+![Début du rollback](../deploiement/captures/08-rollback-prod-debut.png)
+*Figure 20 – Job `rollback-prod` : retour de `sha-c1e56f9` vers `sha-8d97f20`, téléchargement de l'image v1.*
+
+![Fin du rollback](../deploiement/captures/09-rollback-prod-fin.png)
+*Figure 21 – Fin du rollback : `backend` en `sha-8d97f20`, migrations rejouées sans erreur (`Exited (0)`), PostgreSQL non redémarré, donc données conservées.*
+
+Résultat de la vérification après rollback :
+
+```
+==> [prod] Vérification des données
+    version déployée : sha-8d97f20
+    authentification : OK
+    candidats en base : 1
+    OK : le candidat de test est présent
+==> Tests de fumée prod : http://192.168.64.2:4000/v1
+    OK   API démarrée (/health -> 200)
+    OK   Base de données connectée (/ready -> 200)
+    OK   Informations de l'API (/info -> 200)
+    OK   Route protégée sans token (/candidates -> 401)
+    OK   Route inconnue (/route-inconnue -> 404)
+==> prod validé
+```
+
+Trace d'audit de la séquence (`deploy-history.log`) :
+
+```
+2026-11-10T11:20:52Z env=prod action=deploy   tag=sha-8d97f20 precedent=sha-c1e56f9 par=mcd2020etude pipeline=…/pipelines/3049309029
+2026-11-10T11:24:58Z env=prod action=deploy   tag=sha-c1e56f9 precedent=sha-8d97f20 par=mcd2020etude pipeline=…/pipelines/3049323619
+2026-11-10T11:26:14Z env=prod action=rollback tag=sha-8d97f20 precedent=sha-c1e56f9 par=mcd2020etude pipeline=…/pipelines/3049323619
+```
 
 ## 10. Exigences de qualité et de sécurité – partie 2
 
